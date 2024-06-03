@@ -1,26 +1,31 @@
-const { User, Book } = require("../models");
+const { User } = require("../models");
 const { signToken, AuthenticationError } = require("../utils/auth");
 
 const resolvers = {
 	Query: {
-		users: async () => {
-			return User.find().populate("thoughts");
-		},
-		user: async (parent, { username }) => {
-			return User.findOne({ username }).populate("thoughts");
-		},
-		books: async (parent, { username }) => {
-			const params = username ? { username } : {};
-			return Book.find(params).sort({ bookId: -1 });
-		},
-		book: async (parent, { bookId }) => {
-			return Book.findOne({ _id: thoughtId });
-		},
 		me: async (parent, args, context) => {
 			if (context.user) {
-				return User.findOne({ _id: context.user._id }).populate("books");
+				const userData = await User.findOne({ _id: context.user._id }).select(
+					"-__v -password"
+				);
+				return userData;
 			}
-			throw AuthenticationError;
+			throw new AuthenticationError("Not logged in");
+		},
+		searchGoogleBooks: async (parent, { query }) => {
+			const url = `https://www.googleapis.com/books/v1/volumes?q=${query}`;
+			const fetch = (await import("node-fetch")).default;
+			const response = await fetch(url);
+			const data = await response.json();
+
+			return data.items.map((book) => ({
+				bookId: book.id,
+				authors: book.volumeInfo.authors || ["No author to display"],
+				title: book.volumeInfo.title,
+				description: book.volumeInfo.description,
+				image: book.volumeInfo.imageLinks?.thumbnail || "",
+				link: book.volumeInfo.infoLink,
+			}));
 		},
 	},
 
@@ -34,54 +39,41 @@ const resolvers = {
 			const user = await User.findOne({ email });
 
 			if (!user) {
-				throw AuthenticationError;
+				throw new AuthenticationError("Incorrect credentials");
 			}
 
 			const correctPw = await user.isCorrectPassword(password);
 
 			if (!correctPw) {
-				throw AuthenticationError;
+				throw new AuthenticationError("Incorrect credentials");
 			}
 
 			const token = signToken(user);
-
 			return { token, user };
 		},
-		addBook: async (
-			parent,
-			{ authors, description, bookId, image, link, title },
-			context
-		) => {
+		saveBook: async (parent, { bookData }, context) => {
 			if (context.user) {
-				const thought = await Book.create({
-					authors,
-					savedBooks: context.user.username,
-				});
-
-				await User.findOneAndUpdate(
+				const updatedUser = await User.findByIdAndUpdate(
 					{ _id: context.user._id },
-					{ $addToSet: { books: book._id } }
+					{ $addToSet: { savedBooks: bookData } },
+					{ new: true, runValidators: true }
 				);
 
-				return book;
+				return updatedUser;
 			}
-			throw AuthenticationError;
-			("You need to be logged in!");
+			throw new AuthenticationError("You need to be logged in!");
 		},
 		removeBook: async (parent, { bookId }, context) => {
 			if (context.user) {
-				const book = await Book.findOneAndDelete({
-					_id: bookId,
-				});
-
-				await User.findOneAndUpdate(
+				const updatedUser = await User.findByIdAndUpdate(
 					{ _id: context.user._id },
-					{ $pull: { books: book._id } }
+					{ $pull: { savedBooks: { bookId } } },
+					{ new: true }
 				);
 
-				return book;
+				return updatedUser;
 			}
-			throw AuthenticationError;
+			throw new AuthenticationError("You need to be logged in!");
 		},
 	},
 };

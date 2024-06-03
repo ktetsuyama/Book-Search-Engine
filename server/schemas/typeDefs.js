@@ -1,19 +1,19 @@
 const typeDefs = `
+  type Book {
+    authors: [String]
+    description: String
+    bookId: String
+    image: String
+    link: String
+    title: String
+  }
+
   type User {
     _id: ID
     username: String
     email: String
     bookCount: Int
-    savedBooks: [Book]!
-  }
-
-  type Book {
-    bookId: ID
-    authors: [String]
-    description: String
-    title: String
-    image: String
-    link: String
+    savedBooks: [Book]
   }
 
   type Auth {
@@ -22,18 +22,24 @@ const typeDefs = `
   }
 
   type Query {
-    // users: [User]
-    // user(username: String!): User
-    // thoughts(username: String): [Thought]
-    // thought(thoughtId: ID!): Thought
     me: User
+    searchGoogleBooks(query: String!): [Book]
+  }
+
+  input BookInput {
+    authors: [String]
+    description: String
+    bookId: String
+    image: String
+    link: String
+    title: String
   }
 
   type Mutation {
     login(email: String!, password: String!): Auth
     addUser(username: String!, email: String!, password: String!): Auth
-    saveBook(author: String!, description: String!, title: String!, bookId:ID!, image: String!, link: String!): User
-    removeBook(bookId: ID!): User
+    saveBook(bookData: BookInput!): User
+    removeBook(bookId: String!): User
   }
 `;
 
